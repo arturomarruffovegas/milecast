@@ -8,7 +8,7 @@ const colorByRisk = Object.fromEntries(riskLevels.map((risk, index) => [risk, ri
 const rgbColors = riskColors.map(hex => hex.slice(1).match(/../g).map(byte => parseInt(byte, 16)));
 const tileUrl = import.meta.env.VITE_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const tileAttribution = import.meta.env.VITE_TILE_ATTRIBUTION ||
-  '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>';
+  '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a> · <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noreferrer">Fix the map</a>';
 const formatMiles = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
 
 // Each tile stays in Leaflet's projected tile grid throughout pan and zoom.

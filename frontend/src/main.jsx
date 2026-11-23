@@ -2,12 +2,12 @@ import React, { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   ArrowRight, BookOpen, Check, ChevronRight, CircleHelp, CloudSun, Clock3, Crosshair,
-  Database, Flag, Map as MapIcon, MapPinned, Milestone, Pause, Play, Route, ShieldCheck, Truck,
+  Database, Flag, Map as MapIcon, MapPinned, Milestone, Pause, Play, Route, ShieldCheck, Truck, Wind, CloudRain, Snowflake,
 } from 'lucide-react'
 import TripForm, { initialTrip } from './TripForm'
 import RouteMap from './RouteMap'
 import Details, { RiskPill } from './Details'
-import { displayTime, journeyTime, placeName, routeColors } from './format'
+import { displayTime, journeyTime, placeName, riskLevels, routeColors } from './format'
 import './styles.css'
 
 function Header({setDialog}) {
@@ -28,6 +28,21 @@ function ForecastBar({plan, hour, setHour, playing, setPlaying}) {
       <div className="ticks" aria-hidden="true"><span>Departure</span><span>+12h</span><span>+24h</span><span>+36h</span><span>+48h</span></div>
     </div>
   </div>
+}
+
+function CorridorWeather({ heatmap, hour }) {
+  const peaks = heatmap.hourlyPeaks?.[hour]
+  if (!peaks) return null
+  const highest = Math.max(...heatmap.points.map(point => riskLevels.indexOf(point.risks[hour])))
+  return <section className="corridor-weather" aria-label="Hourly corridor weather">
+    <div className="weather-caption"><strong>Corridor weather</strong><span>Open-Meteo · {heatmap.points.length} locations</span></div>
+    <dl className="weather-metrics">
+      <div><dt><Wind/> Peak wind</dt><dd>{peaks.windMph.toFixed(1)} mph</dd></div>
+      <div><dt><CloudRain/> Peak rain</dt><dd>{peaks.rainInHr.toFixed(3)} in/h</dd></div>
+      <div><dt><Snowflake/> Peak snow</dt><dd>{peaks.snowInHr.toFixed(3)} in/h</dd></div>
+    </dl>
+    <div className="peak-risk"><span>Highest risk</span><RiskPill risk={riskLevels[highest]}/></div>
+  </section>
 }
 
 function RouteCard({route, i, selected, recommended, choose, inspect}) {
@@ -88,7 +103,7 @@ function App() {
     try {
       const response = await fetch('/api/plan', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({origin:trip.origin.trim(),destination:trip.destination.trim(),departure:date.toISOString(),loadLb:Number(trip.weight),intervalMiles:trip.intervalMiles}),
+        body: JSON.stringify({origin:trip.origin,destination:trip.destination,departure:date.toISOString(),loadLb:Number(trip.weight),intervalMiles:trip.intervalMiles}),
         signal: AbortSignal.timeout(115000),
       })
       const result = await response.json().catch(() => ({}))
@@ -99,6 +114,8 @@ function App() {
       setHour(0)
       setFitSignal(v => v + 1)
     } catch (e) {
+      setPlan(null)
+      setSelectedId(null)
       setError(e.name === 'TimeoutError' ? 'The trip took too long to calculate. Please try again.' : e instanceof TypeError ? 'Could not reach the planner. Check your connection and try again.' : e.message)
     } finally {sending.current = false;setBusy(false)}
   }
@@ -112,17 +129,18 @@ function App() {
           <div><div className="map-kicker"><MapPinned size={14}/> Route overview</div>
             <h2>{plan ? <><span>{placeName(plan.origin)}</span><ArrowRight size={25}/><span>{placeName(plan.destination)}</span></> : 'Plan a truck route'}</h2>
           </div>
-          {plan && <span className={'forecast-status' + (example ? '' : ' live')} title={example ? 'Saved trip with a dated forecast. Calculate routes for current conditions.' : 'Forecast requested for your trip'}>{example ? <BookOpen size={13}/> : <Check size={14}/>} {example ? 'Example trip' : 'Trip forecast'}</span>}
+          {plan && <span className={'forecast-status' + (example ? '' : ' live')} title={example ? 'Saved Open-Meteo forecast. Calculate routes for your departure time.' : 'Calculated with hourly Open-Meteo forecasts for this trip.'}>{example ? <BookOpen size={13}/> : <Check size={14}/>} {example ? 'Saved example forecast' : 'Open-Meteo forecast'}</span>}
         </div>
-        <section className="map-frame" aria-label="Interactive route map">
+        {error && !plan ? <section className="empty-forecast"><MapPinned size={32}/><h3>No forecast for this trip</h3><p>Update the trip details and calculate routes again.</p></section> : <section className="map-frame" aria-label="Interactive route map">
           <RouteMap plan={plan} selectedId={selectedId} onSelect={setSelectedId} showHeat={showHeat} hour={hour} fitSignal={fitSignal}/>
           {plan && <>
-            <div className="layer-options" aria-label="Map layers"><button aria-pressed={!showHeat} onClick={() => {setShowHeat(false);setPlaying(false)}}><MapIcon size={15}/> Routes</button><button aria-pressed={showHeat} onClick={() => setShowHeat(true)}><CloudSun size={16}/> Weather</button></div>
+            <div className="layer-options" aria-label="Map layers"><button aria-pressed={!showHeat} onClick={() => {setShowHeat(false);setPlaying(false)}}><MapIcon size={15}/> Routes</button><button aria-pressed={showHeat} onClick={() => setShowHeat(true)}><CloudSun size={16}/> Weather risk</button></div>
             <button className="fit-map" title="Fit all routes" aria-label="Fit all routes" onClick={() => setFitSignal(i => i + 1)}><Crosshair size={17}/></button>
             {showHeat && <ForecastBar plan={plan} hour={hour} setHour={setHour} playing={playing} setPlaying={setPlaying}/>}
           </>}
-        </section>
+        </section>}
         {plan && <>
+          {showHeat && <CorridorWeather heatmap={plan.heatmap} hour={hour}/>}
           <div className="trip-strip"><span><Flag/> {displayTime(plan.departure,true)}</span><i/><span><Truck/> {plan.loadLb.toLocaleString('en-US')} lb</span><i/><span><Milestone/> Every {plan.intervalMiles} mi</span></div>
           {plan.warnings.map(msg => <p key={msg} className="notice" role="status">{msg}</p>)}
           <section className="options">

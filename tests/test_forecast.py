@@ -1,6 +1,7 @@
 import unittest
+from datetime import datetime, timezone
 
-from server.forecast import at_time
+from server.forecast import at_time, heatmap
 from server.providers import PlanningError
 
 
@@ -26,3 +27,19 @@ class HourlyWeatherTests(unittest.TestCase):
         self.hourly["snowfall"][1] = None
         with self.assertRaises(PlanningError):
             at_time(self.hourly, 1800)
+
+    def test_corridor_peaks_track_each_hour_even_when_weather_stays_low(self):
+        points = [(42.0, -89.0), (42.1, -89.1)]
+        forecasts = {}
+        for index, point in enumerate(points):
+            forecasts[point] = {
+                "time": [h * 3600 for h in range(49)],
+                "wind_speed_10m": [6.0 + index + h / 4 for h in range(49)],
+                "rain": [0.04 * (1 - index)] * 49,
+                "showers": [0.02] * 49,
+                "snowfall": [0.05 * index] * 49,
+            }
+        result = heatmap(points, forecasts, datetime.fromtimestamp(0, timezone.utc), 100000)
+        self.assertEqual(result["hourlyPeaks"][0], {"windMph": 7, "rainInHr": 0.06, "snowInHr": 0.05})
+        self.assertEqual(result["hourlyPeaks"][48]["windMph"], 19)
+        self.assertTrue(all(point["risks"] == ["Low"] * 49 for point in result["points"]))

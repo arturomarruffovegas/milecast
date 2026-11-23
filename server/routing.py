@@ -3,8 +3,10 @@ import math
 import re
 import threading
 import time
+from bisect import bisect_left
 from collections import Counter
 from dataclasses import dataclass
+from itertools import accumulate
 
 from django.core.cache import caches
 
@@ -74,19 +76,29 @@ _router_clock = 0.0
 _router_lock = threading.Lock()
 
 
-def request_routes(locations, alternates):
+class RouteDistanceLimit(PlanningError):
+    pass
+
+
+def pace_routing_request():
     global _router_clock
+    # Both public routing services share a one-request-per-second usage policy.
+    with _router_lock:
+        time.sleep(max(0.0, 1.0 - (time.monotonic() - _router_clock)))
+        _router_clock = time.monotonic()
+
+
+def request_routes(locations, alternates):
     key = cache_key("truck", locations, alternates)
     stored = caches["routing"].get(key)
     if stored is not None:
         return stored
-    # Space public demo requests even when multiple users plan trips together.
-    with _router_lock:
-        time.sleep(max(0.0, 1.0 - (time.monotonic() - _router_clock)))
-        _router_clock = time.monotonic()
+    pace_routing_request()
     params = {"locations": locations, "costing": "truck", "alternates": alternates, "units": "kilometers"}
     data = get_json("https://valhalla1.openstreetmap.de/route", {"json": json.dumps(params, separators=(",", ":"))},
                     "Truck routing", allow_no_route=True)
+    if data.get("error_code") == 154:
+        raise RouteDistanceLimit("The truck-routing provider's distance limit was reached.")
     trips = [data["trip"], *(a["trip"] for a in data.get("alternates", []))] if "trip" in data else []
     routes = [parse_trip(trip) for trip in trips if trip["summary"]["length"] > 0]
     # Bound large route entries separately from weather and geocoding records.
@@ -114,35 +126,141 @@ def via_locations(origin, destination):
                "search_filter": {"min_road_class": "secondary", "exclude_ramp": True}}
 
 
+def bearing(a, b):
+    dlon = (b[0] - a[0] + 180) % 360 - 180
+    lat = math.radians((a[1] + b[1]) / 2)
+    return math.degrees(math.atan2(dlon * math.cos(lat), b[1] - a[1])) % 360
+
+
+def guide_stops(route):
+    """Choose oriented points inside road edges for truck-routing leg boundaries."""
+    # Valhalla's public truck endpoint accepts up to 1,500 km per call. Target
+    # 1,200 road km per leg, leaving headroom for differences in truck access.
+    count = max(2, math.ceil(route["distance"] / 1_200_000))
+    coords = decode_polyline(route["geometry"])
+    distances = list(accumulate((edge_length_m(a, b) for a, b in zip(coords, coords[1:])), initial=0.0))
+    stops = []
+    for i in range(1, count):
+        j = bisect_left(distances, i * distances[-1] / count)
+        a, b = coords[j - 1], coords[j]
+        dlon = (b[0] - a[0] + 180) % 360 - 180
+        lat = (a[1] + b[1]) / 2
+        stops.append({"lat": round(lat, 6), "lon": round((a[0] + dlon / 2 + 180) % 360 - 180, 6),
+                      "heading": round(bearing(a, b)) % 360, "heading_tolerance": 45, "node_snap_tolerance": 1})
+    return stops
+
+
+def guide_corridors(endpoints):
+    key = cache_key("long-haul-stops", endpoints)
+    corridors = caches["default"].get(key)
+    if corridors is None:
+        encoded = ";".join(f"{p['lon']},{p['lat']}" for p in endpoints)
+        pace_routing_request()
+        # OSRM supplies candidate junction coordinates only. Each leg's geometry,
+        # mileage and travel time subsequently come from Valhalla truck routing.
+        data = get_json(f"https://routing.openstreetmap.de/routed-car/route/v1/driving/{encoded}",
+                        {"geometries": "polyline6", "overview": "full", "alternatives": 2},
+                        "Long-distance corridor search", allow_no_route=True)
+        corridors = [guide_stops(r) for r in data.get("routes", [])[:2] if r.get("geometry")]
+        caches["default"].set(key, corridors, 3600)
+    return corridors
+
+
+def join_legs(legs):
+    # A different carriageway, bridge level or disconnected road must never be
+    # drawn as a continuous truck itinerary. Both legs must share the snapped point.
+    for a, b in zip(legs, legs[1:]):
+        seam = a.coordinates[-1]
+        if seam != b.coordinates[0]:
+            return None
+        before = next((p for p in reversed(a.coordinates) if p != seam), None)
+        after = next((p for p in b.coordinates if p != seam), None)
+        if before is None or after is None:
+            return None
+        turn = (bearing(seam, after) - bearing(before, seam) + 180) % 360 - 180
+        if abs(turn) > 90:  # Opposing approach/departure would introduce a U-turn.
+            return None
+    roads = Counter()
+    coords = [legs[0].coordinates[0]]
+    lengths, seconds = [], []
+    for leg in legs:
+        roads[leg.name.split(" / ")[0]] += leg.distance_m
+        coords.extend(leg.coordinates[1:])
+        lengths.extend(leg.edge_lengths)
+        seconds.extend(leg.edge_seconds)
+    return RoadRoute(" / ".join(name for name, _ in roads.most_common(2)), coords,
+                     sum(r.distance_m for r in legs), sum(r.duration_s for r in legs), lengths, seconds)
+
+
+def add_distinct(route, selected, signatures):
+    if selected and route.distance_m > selected[0].distance_m * 1.8:
+        return
+    cells = {(round(x, 3), round(y, 3)) for x, y in route.coordinates}
+    if any(len(cells & other) / max(len(cells), len(other)) > 0.94 for other in signatures):
+        return
+    signatures.append(cells)
+    selected.append(route)
+
+
+def long_haul_routes(endpoints):
+    selected, signatures = [], []
+    for stops in guide_corridors(endpoints):
+        locations = [endpoints[0], *stops, endpoints[1]]
+        options = []
+        for start, end in zip(locations, locations[1:]):
+            try:
+                legs = request_routes([start, end], 2)
+            except RouteDistanceLimit:
+                break
+            if not legs:
+                break
+            options.append(sorted(legs, key=lambda r: r.duration_s))
+        if len(options) != len(locations) - 1:
+            continue
+        fastest = [legs[0] for legs in options]
+        # Try a change to each leg, plus whole-corridor alternate combinations.
+        # This keeps the candidate count linear in the number of routing legs.
+        choices = [fastest]
+        for i, legs in enumerate(options):
+            for alternate in legs[1:]:
+                choices.append([*fastest[:i], alternate, *fastest[i + 1:]])
+        for rank in (1, 2):
+            choices.append([legs[min(rank, len(legs) - 1)] for legs in options])
+        for legs in sorted(choices, key=lambda rows: sum(r.duration_s for r in rows)):
+            route = join_legs(legs)
+            if route:
+                add_distinct(route, selected, signatures)
+            if len(selected) == 3:
+                return selected
+    if not selected:
+        raise PlanningError("The trip exceeds the provider's single-leg limit and a continuous truck itinerary "
+                            "could not be assembled. Try planning shorter sections.")
+    return selected
+
+
 def road_routes(origin, destination):
     endpoints = [{k: place[k] for k in ("lat", "lon")} for place in (origin, destination)]
-    primary = request_routes(endpoints, 2)
+    try:
+        primary = request_routes(endpoints, 2)
+    except RouteDistanceLimit:
+        return long_haul_routes(endpoints)
     if not primary:
         raise PlanningError("No connected truck route was found between these places.")
     selected, signatures = [], []
 
-    def include(route):
-        if route.distance_m > primary[0].distance_m * 1.8:
-            return
-        # Compare the occupied road cells, so a minor local detour doesn't count
-        # as another option. Native alternates and via results use the same test.
-        cells = {(round(x, 3), round(y, 3)) for x, y in route.coordinates}
-        if any(len(cells & other) / max(len(cells), len(other)) > 0.94 for other in signatures):
-            return
-        signatures.append(cells)
-        selected.append(route)
-
     for route in primary:
-        include(route)
+        add_distinct(route, selected, signatures)
     for via in via_locations(*endpoints):
         if len(selected) >= 3:
             break
         try:
             options = request_routes([endpoints[0], via, endpoints[1]], 0)
+        except RouteDistanceLimit:
+            continue
         except PlanningError as exc:
             if exc.status == 503:
                 break  # The native routes can still be assessed.
             raise
         for route in options:
-            include(route)
+            add_distinct(route, selected, signatures)
     return selected

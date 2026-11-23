@@ -85,11 +85,17 @@ def at_time(hourly, timestamp):
 def heatmap(points, forecasts, departure, load):
     start = departure.timestamp()
     result = []
+    # Keep the actual peaks alongside the map colors. Two Low hours can have
+    # very different readings even though the risk category is identical.
+    hourly_peaks = [dict(windMph=0.0, rainInHr=0.0, snowInHr=0.0) for _ in range(49)]
     for lat, lon in points:
         hourly = forecasts[lat, lon]
-        risks = [
-            RISK_LABELS[classify(*at_time(hourly, start + hour * 3600), load)]
-            for hour in range(49)
-        ]
+        risks = []
+        for hour, peaks in enumerate(hourly_peaks):
+            wind, rain, snow = at_time(hourly, start + hour * 3600)
+            risks.append(RISK_LABELS[classify(wind, rain, snow, load)])
+            peaks["windMph"] = max(peaks["windMph"], wind)
+            peaks["rainInHr"] = max(peaks["rainInHr"], rain)
+            peaks["snowInHr"] = max(peaks["snowInHr"], snow)
         result.append({"lat": lat, "lon": lon, "risks": risks})
-    return {"start": departure.isoformat(), "points": result}
+    return {"start": departure.isoformat(), "points": result, "hourlyPeaks": hourly_peaks}

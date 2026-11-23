@@ -1,5 +1,6 @@
 import React from 'react'
-import { ArrowRight, ArrowUpDown, CalendarDays, Clock3, LoaderCircle, MapPin, Navigation2, Package, SlidersHorizontal } from 'lucide-react'
+import { ArrowRight, ArrowUpDown, CalendarDays, Clock3, LoaderCircle, Navigation2, Package, SlidersHorizontal } from 'lucide-react'
+import AddressField from './AddressField'
 import { riskLevels, riskColors } from './format'
 
 function nextDeparture() {
@@ -26,9 +27,10 @@ export default function TripForm({ trip, change, submit, busy, openGuide, error 
       <fieldset disabled={busy}>
         <div className="locations">
           <label htmlFor="origin">Origin</label>
-          <div className="input-with-icon"><span className="origin-symbol"/><input id="origin" value={trip.origin} onChange={e => set('origin',e.target.value)} placeholder="City, ZIP, or coordinates" required maxLength={150}/></div>
+          <AddressField id="origin" value={trip.origin} onChange={value => set('origin', value)}/>
           <div className="destination-label"><label htmlFor="destination">Destination</label><button type="button" className="swap" title="Swap origin and destination" aria-label="Swap origin and destination" onClick={() => change(prev => ({...prev,origin:prev.destination,destination:prev.origin}))}><ArrowUpDown size={13}/> Swap</button></div>
-          <div className="input-with-icon"><MapPin size={17} className="destination-icon"/><input id="destination" value={trip.destination} onChange={e => set('destination',e.target.value)} placeholder="City, ZIP, or coordinates" required maxLength={150}/></div>
+          <AddressField id="destination" value={trip.destination} onChange={value => set('destination', value)}/>
+          <p className="place-hint">Search by street address, city, or ZIP code.</p>
         </div>
         <div className="form-block">
           <div className="field-label">Departure <span className="zone">{zone || 'Local time'}</span></div>

@@ -27,11 +27,13 @@ export default function Details({view, route, isExample, close}) {
       </> : view === 'sources' ? <>
         <div className="source-list">{[
           ['Truck routing','Valhalla uses OpenStreetMap roads and truck-access data to estimate routes and driving times.','https://valhalla.github.io/valhalla/'],
+          ['Long-distance waypoints','OSRM identifies candidate junctions on long trips. Valhalla calculates the truck route and travel time for each leg.','https://project-osrm.org/'],
           ['Weather forecasts','Open-Meteo supplies hourly wind, rainfall, and snowfall for the trip corridor.','https://open-meteo.com/en/docs'],
-          ['Place search','Open-Meteo uses GeoNames to look up cities and postal codes. You can also enter latitude and longitude.','https://open-meteo.com/en/docs/geocoding-api'],
+          ['Address suggestions','Photon searches OpenStreetMap for street addresses, businesses, and places.','https://photon.komoot.io/'],
+          ['U.S. street addresses','The U.S. Census Geocoder can resolve additional U.S. street addresses.','https://geocoding.geo.census.gov/geocoder/'],
           ['Map data','OpenStreetMap contributors maintain the roads, places, and geographic features on the map.','https://www.openstreetmap.org/copyright'],
         ].map(([name,copy,url]) => <section key={name}><a href={url} target="_blank" rel="noreferrer">{name}<ExternalLink size={13}/></a><p>{copy}</p></section>)}</div>
-        <p className="dialog-note">The opening example is a saved trip with a dated forecast. Calculate a trip to request a fresh forecast.</p>
+        <p className="dialog-note">The opening example uses a saved Open-Meteo forecast. Calculate a trip for your departure time. The slider shows corridor weather in the selected hour. Checkpoints show the forecast at each truck arrival time.</p>
       </> : <>
         <p>Each checkpoint takes the highest risk from wind, rain, and snow at the truck’s ETA. Load weight can raise the wind risk.</p>
         <div className="table-pan"><table><thead><tr><th>Risk</th><th>Wind · mph</th><th>Rain · in/h</th><th>Snow · in/h</th></tr></thead>

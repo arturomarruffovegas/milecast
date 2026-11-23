@@ -7,7 +7,7 @@ from django.views.decorators.http import require_GET
 
 from .engine import RISK_LABELS, classify, ranking_key, sample_route, summarize
 from .forecast import at_time, corridor_points, fetch_forecasts, heatmap, location_key
-from .providers import PlanningError, geocode
+from .providers import PlanningError, geocode, place_input, search_places
 from .routing import road_routes
 
 
@@ -16,16 +16,23 @@ def health(request):
     return JsonResponse({"status": "ok"})
 
 
+@require_GET
+def places(request):
+    query = request.GET.get("q", "").strip()
+    if len(query) > 160:
+        return JsonResponse({"error": "Use at most 160 characters for a place search."}, status=400)
+    try:
+        suggestions = search_places(query) if len(query) >= 3 else []
+    except PlanningError as exc:
+        return JsonResponse({"error": str(exc)}, status=exc.status)
+    return JsonResponse({"places": suggestions})
+
+
 def inputs(body):
     if not isinstance(body, dict):
         raise PlanningError("Enter your trip details as a JSON object.", 400)
-    places = []
-    for field in ("origin", "destination"):
-        value = body.get(field)
-        if not isinstance(value, str) or not 2 <= len(value.strip()) <= 160:
-            raise PlanningError(f"The {field} must be between 2 and 160 characters.", 400)
-        places.append(value.strip())
-    if places[0].casefold() == places[1].casefold():
+    places = [place_input(body.get(field), field) for field in ("origin", "destination")]
+    if all(isinstance(p, str) for p in places) and places[0].casefold() == places[1].casefold():
         raise PlanningError("Choose different places for the origin and destination.")
     load = body.get("loadLb")
     if isinstance(load, bool) or not isinstance(load, (float, int)) or not 0 <= load <= 1_000_000:
