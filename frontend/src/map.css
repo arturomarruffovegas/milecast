@@ -1,0 +1,203 @@
+.route-map {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: #e8ede8;
+  font-family: inherit;
+  --map-ink: #302c3d;
+}
+
+.route-map .route-map-basemap {
+  filter: saturate(0.4) contrast(0.92) brightness(1.045);
+}
+
+.route-map .leaflet-top.leaflet-right {
+  top: 58px;
+  right: 14px;
+}
+
+.route-map .leaflet-control-zoom {
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid #d7d5de;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px #27233c13;
+}
+
+.route-map .leaflet-control-zoom a {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  border-color: #e4e2e9;
+  color: var(--map-ink);
+  font: 500 21px/1 system-ui, sans-serif;
+}
+
+.route-map .leaflet-control-zoom a:hover,
+.route-map .leaflet-control-zoom a:focus-visible {
+  background: #f3f0ff;
+  color: #5135bc;
+}
+
+.route-map .leaflet-control-scale {
+  margin: 0 0 4px 12px;
+}
+
+.route-map .leaflet-control-scale-line {
+  padding: 0 4px 1px;
+  background: #ffffffe0;
+  border-width: 0 1px 2px;
+  border-color: #545465;
+  color: #353441;
+  font: 600 9px/1.4 system-ui, sans-serif;
+}
+
+.route-map .leaflet-control-attribution {
+  padding: 1px 5px;
+  border-radius: 4px 0 0 0;
+  background: #ffffffe8;
+  color: #565562;
+  font: 500 9px/1.4 system-ui, sans-serif;
+}
+
+.route-map .leaflet-control-attribution a {
+  color: #444052;
+  text-decoration: underline;
+  text-underline-offset: 1px;
+}
+
+.route-map-road-tag {
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  gap: 5px;
+  transform: translate(-50%, -120%);
+  padding: 5px 8px;
+  border: 1px solid var(--track);
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 1px 4px #211a3829;
+  color: var(--track);
+  white-space: nowrap;
+  font: 700 11px/1.05 system-ui, sans-serif;
+  letter-spacing: -0.015em;
+  cursor: pointer;
+}
+
+.route-map-road-tag::before {
+  content: "";
+  width: 10px;
+  height: 3px;
+  background: currentColor;
+  border-radius: 2px;
+}
+
+.route-map-road-tag.is-selected {
+  background: var(--track);
+  color: white;
+}
+
+.route-map-endpoint {
+  position: relative;
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  box-sizing: border-box;
+  border: 2px solid white;
+  border-radius: 50%;
+  color: white;
+  background: #322b49;
+  box-shadow: 0 1px 5px #1d173148;
+  font: 700 12px/1 system-ui, sans-serif;
+}
+
+.route-map-endpoint::after {
+  position: absolute;
+  content: "";
+  top: 20px;
+  left: 7px;
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  background: #322b49;
+}
+
+.route-map .leaflet-popup-content-wrapper {
+  border: 1px solid #e5e3ea;
+  border-radius: 11px;
+  box-shadow: 0 3px 18px #27213c22;
+}
+
+.route-map .leaflet-popup-content {
+  margin: 14px 18px;
+}
+
+.route-map .leaflet-popup-close-button {
+  top: 4px;
+  right: 4px;
+  color: #64616f;
+}
+
+.route-map-popup {
+  width: 205px;
+  color: var(--map-ink);
+  font-family: inherit;
+}
+
+.route-map-popup-title {
+  display: block;
+  padding-right: 7px;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.route-map-risk {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.route-map-risk::before {
+  width: 8px;
+  height: 8px;
+  content: "";
+  border-radius: 50%;
+  background: var(--risk);
+}
+
+.route-map-popup-stats {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 5px 9px;
+  margin: 9px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid #e9e7ed;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.route-map-popup-stats dt {
+  color: #635f6e;
+}
+
+.route-map-popup-stats dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .route-map .leaflet-top.leaflet-right { right: 10px; }
+  .route-map .leaflet-control-zoom a { width: 30px; height: 30px; }
+  .route-map-road-tag { padding: 4px 6px; font-size: 10px; }
+}
