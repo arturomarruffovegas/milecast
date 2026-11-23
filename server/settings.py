@@ -6,6 +6,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DIST_DIR = BASE_DIR / "frontend" / "dist"
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or secrets.token_urlsafe(48)
 DEBUG = False
+# Identify the site to OpenStreetMap when the browser requests map tiles.
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]", "testserver"]
 if hostname := os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
     ALLOWED_HOSTS.append(hostname)
